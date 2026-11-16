@@ -1,0 +1,22 @@
+# Local environment values
+.env
+tmp_budgetly/
+materialy.txt
+build_budgetly_plan.py
+/*.pdf
+/*.docx
+
+# .NET
+**/bin/
+**/obj/
+.vs/
+
+# Angular / Node
+**/node_modules/
+**/dist/
+**/.angular/
+**/TestResults/
+
+# IDEs
+.idea/
+*.user
