@@ -1,0 +1,164 @@
+<main class="shell">
+  <header class="topbar">
+    <a class="brand" href="/">Budgetly</a>
+    @if (session(); as user) {
+      <div class="account"><span>{{ user.email }}</span><button type="button" class="secondary" (click)="logout()" [disabled]="busy()">Wyloguj się</button></div>
+    }
+  </header>
+
+  @if (error()) { <p class="notice error" role="alert">{{ error() }}</p> }
+  @if (message()) { <p class="notice" role="status">{{ message() }}</p> }
+
+  @if (!session()) {
+    <section class="panel auth">
+      <h1>{{ authMode === 'login' ? 'Zaloguj się' : 'Załóż konto' }}</h1>
+      <p>Kontroluj wydatki, planuj budżet i śledź oszczędności.</p>
+      <form class="fields" (ngSubmit)="authenticate()" #authForm="ngForm">
+        <label>E-mail<input name="email" type="email" autocomplete="email" required [(ngModel)]="email"></label>
+        <label>Hasło<input name="password" type="password" [attr.autocomplete]="authMode === 'login' ? 'current-password' : 'new-password'" required minlength="8" maxlength="128" [(ngModel)]="password"></label>
+        <button [disabled]="busy() || authForm.invalid">{{ authMode === 'login' ? 'Zaloguj się' : 'Załóż konto' }}</button>
+      </form>
+      <button type="button" class="secondary switch" [disabled]="busy()" (click)="authMode = authMode === 'login' ? 'register' : 'login'">
+        {{ authMode === 'login' ? 'Utwórz nowe konto' : 'Mam już konto' }}
+      </button>
+    </section>
+  } @else {
+    <section class="heading">
+      <h1>Budżet domowy</h1>
+      <label>Miesiąc<input type="month" [(ngModel)]="month" (change)="selectMonth()" [disabled]="busy()" min="1900-01" max="9999-12"></label>
+    </section>
+
+    @if (summary(); as totals) {
+      <section class="metrics" aria-label="Podsumowanie miesiąca">
+        <div><span>Saldo</span><strong>{{ totals.balance | currency:'PLN' }}</strong></div>
+        <div><span>Przychody</span><strong>{{ totals.income | currency:'PLN' }}</strong></div>
+        <div><span>Wydatki</span><strong>{{ totals.spending | currency:'PLN' }}</strong></div>
+      </section>
+      @if (totals.limit !== null && totals.spending > totals.limit) {
+        <p class="notice" role="status">Wydatki w tym miesiącu przekraczają limit o {{ totals.spending - totals.limit | currency:'PLN' }}.</p>
+      }
+      <section class="grid" aria-label="Limit i wydatki">
+        <div class="panel">
+          <h2>Limit miesięczny</h2>
+          <form class="fields" (ngSubmit)="saveBudget()" #budgetForm="ngForm">
+            <label>Limit w PLN<input name="limit" type="number" min="0.01" max="999999999.99" step="0.01" required [(ngModel)]="limit"></label>
+            <label class="check"><input name="priority" type="checkbox" [(ngModel)]="highPriority"> Blokuj wydatki po przekroczeniu limitu</label>
+            <div class="actions"><button [disabled]="busy() || budgetForm.invalid || !month">Zapisz limit</button>
+              @if (totals.limit !== null) {
+                <button type="button" class="secondary" [disabled]="busy()" (click)="deleteBudget()">Usuń limit</button>
+              }
+            </div>
+          </form>
+        </div>
+        <div class="panel">
+          <h2>Wydatki według kategorii</h2>
+          @for (category of totals.categories; track category.categoryId) {
+            <div class="bar-row"><span>{{ category.name }}</span><strong>{{ category.spending | currency:'PLN' }}</strong>
+              <meter [attr.aria-label]="category.name" min="0" [max]="totals.spending" [value]="category.spending"></meter>
+            </div>
+          } @empty { <p>Brak wydatków w tym miesiącu.</p> }
+        </div>
+      </section>
+    }
+
+    <section class="panel">
+      <h2>{{ editId ? 'Edytuj transakcję' : 'Dodaj transakcję' }}</h2>
+      <form class="fields cols" (ngSubmit)="saveEntry()" #entryForm="ngForm">
+        <label>Typ<select name="type" [(ngModel)]="entry.type" (ngModelChange)="entry.categoryId = ''">
+          <option [ngValue]="2">Wydatek</option><option [ngValue]="1">Przychód</option>
+        </select></label>
+        <label>Kwota w PLN<input name="amount" type="number" required min="0.01" max="999999999.99" step="0.01" [(ngModel)]="entry.amount"></label>
+        <label>Data<input name="date" type="date" required [(ngModel)]="entry.date"></label>
+        <label>Kategoria<select name="category" required [(ngModel)]="entry.categoryId">
+          <option value="">Wybierz</option>
+          @for (category of entryCategories; track category.id) { <option [value]="category.id">{{ category.name }}</option> }
+        </select></label>
+        <label class="wide">Opis<input name="description" maxlength="250" [(ngModel)]="entry.description"></label>
+        <div class="actions"><button [disabled]="busy() || entryForm.invalid">Zapisz transakcję</button>
+          @if (editId) { <button type="button" class="secondary" [disabled]="busy()" (click)="clearEntry()">Anuluj</button> }
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <h2>Historia transakcji</h2>
+        <div class="actions">
+          <label>Typ<select [(ngModel)]="filterType" (change)="changePage(1)" [disabled]="busy()">
+            <option value="">Wszystkie</option><option value="Income">Przychody</option><option value="Expense">Wydatki</option>
+          </select></label>
+          <label>Kategoria<select [(ngModel)]="filterCategory" (change)="changePage(1)" [disabled]="busy()">
+            <option value="">Wszystkie</option>
+            @for (category of categories(); track category.id) { <option [value]="category.id">{{ category.name }}</option> }
+          </select></label>
+        </div>
+      </div>
+      @if (history(); as list) {
+        <div class="table-wrap"><table>
+          <thead><tr><th>Data</th><th>Kategoria</th><th>Opis</th><th>Kwota</th><th>Akcje</th></tr></thead>
+          <tbody>
+            @for (item of list.items; track item.id) {
+              <tr><td>{{ item.date }}</td><td>{{ categoryLabel(item.categoryId) }}</td><td>{{ item.description || '—' }}</td>
+                <td [class.negative]="item.amount < 0">{{ item.amount | currency:'PLN' }}</td>
+                <td><div class="actions"><button class="secondary" [disabled]="busy()" (click)="editEntry(item)">Edytuj</button>
+                  <button class="secondary danger" [disabled]="busy()" (click)="deleteEntry(item.id)">Usuń</button></div></td></tr>
+            } @empty { <tr><td colspan="5">Brak transakcji dla tych filtrów.</td></tr> }
+          </tbody>
+        </table></div>
+        @if (list.total > list.pageSize) {
+          <div class="pagination"><button class="secondary" [disabled]="busy() || list.page <= 1" (click)="changePage(list.page - 1)">Poprzednia</button>
+            <span>Strona {{ list.page }}</span><button class="secondary" [disabled]="busy() || list.page * list.pageSize >= list.total" (click)="changePage(list.page + 1)">Następna</button></div>
+        }
+      }
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <h2>Cele oszczędnościowe</h2>
+        <form class="fields cols" #goalForm="ngForm" (ngSubmit)="saveGoal()">
+          <label class="wide">Nazwa<input name="goalName" maxlength="100" required [(ngModel)]="goal.name"></label>
+          <label>Kwota docelowa<input name="target" type="number" min="0.01" max="999999999.99" step="0.01" required [(ngModel)]="goal.target"></label>
+          <label>Odłożona kwota<input name="saved" type="number" min="0" max="999999999.99" step="0.01" required [(ngModel)]="goal.saved"></label>
+          <div class="actions"><button [disabled]="busy() || goalForm.invalid">{{ goalId ? 'Zapisz zmiany' : 'Dodaj cel' }}</button>
+            @if (goalId) { <button type="button" class="secondary" (click)="clearGoal()">Anuluj</button> }
+          </div>
+        </form>
+        <ul class="items">
+          @for (savedGoal of goals(); track savedGoal.id) {
+            <li><div><strong>{{ savedGoal.name }}</strong><br><span>{{ savedGoal.saved | currency:'PLN' }} / {{ savedGoal.target | currency:'PLN' }}</span>
+              @if (savedGoal.saved >= savedGoal.target) { <span> · Osiągnięty</span> }
+              @if (savedGoal.completedAtUtc) { <span> {{ savedGoal.completedAtUtc | date:'mediumDate' }}</span> }
+            </div><div class="actions"><button class="secondary" [disabled]="busy()" (click)="editGoal(savedGoal)">Edytuj</button>
+                <button class="secondary danger" [disabled]="busy()" (click)="deleteGoal(savedGoal.id)">Usuń</button></div></li>
+          }
+        </ul>
+      </div>
+      <div class="panel">
+        <h2>Własne kategorie</h2>
+        <form class="fields cols" #categoryForm="ngForm" (ngSubmit)="saveCategory()">
+          <label>Nazwa<input name="name" required maxlength="80" [(ngModel)]="categoryName"></label>
+          <label>Typ<select name="categoryType" [(ngModel)]="categoryType" [disabled]="!!categoryEditId">
+            <option [ngValue]="2">Wydatek</option><option [ngValue]="1">Przychód</option>
+          </select></label>
+          <div class="actions"><button [disabled]="busy() || categoryForm.invalid">{{ categoryEditId ? 'Zapisz nazwę' : 'Dodaj kategorię' }}</button>
+            @if (categoryEditId) { <button type="button" class="secondary" (click)="categoryEditId = null; categoryName = ''">Anuluj</button> }
+          </div>
+        </form>
+        <ul class="items">
+          @for (category of categories(); track category.id) {
+            @if (category.canEdit) {
+              <li><strong>{{ category.name }}</strong><div class="actions">
+                <button class="secondary" [disabled]="busy()" (click)="editCategory(category)">Edytuj</button>
+                <button class="secondary danger" [disabled]="busy()" (click)="deleteCategory(category.id)">Usuń</button>
+              </div></li>
+            }
+          }
+        </ul>
+      </div>
+    </section>
+
+    @if (adminCount() !== null) {
+      <section class="panel"><h2>Administracja</h2><p>Liczba kont: {{ adminCount() }}</p></section>
+    }
+  }
+</main>

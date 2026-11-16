@@ -1,0 +1,13 @@
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/.angular
+.git
+.vs
+tmp_budgetly
+*.pdf
+*.docx
+materialy.txt
+build_budgetly_plan.py
+.env

@@ -1,0 +1,49 @@
+name: budgetly
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in the root .env file}
+      MSSQL_PID: Developer
+    volumes:
+      - budgetly-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/1433'"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Budgetly.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Database__ApplyMigrations: "true"
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in the root .env file}
+      Admin__Email: ${BUDGETLY_ADMIN_EMAIL:-}
+      Admin__Password: ${BUDGETLY_ADMIN_PASSWORD:-}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Budgetly: "Server=db,1433;Initial Catalog=Budgetly;User ID=sa;Password=${DB_PASSWORD};Encrypt=True;TrustServerCertificate=True"
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./Budgetly.Web
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:4200:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  budgetly-data:
