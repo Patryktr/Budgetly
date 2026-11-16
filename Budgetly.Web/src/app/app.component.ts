@@ -51,7 +51,7 @@ export class AppComponent {
   goalId: string | null = null;
 
   constructor() {
-    if (this.session()) void this.run(() => this.refresh());
+    if (this.session()) void this.run(() => this.refresh(true));
   }
 
   async authenticate() {
