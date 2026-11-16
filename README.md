@@ -14,6 +14,8 @@ Potrzebujesz Docker Desktop z uruchomionym silnikiem kontenerów linuksowych. Do
 
 4. Wejdź na [http://localhost:4200](http://localhost:4200) i załóż konto. [Dokument OpenAPI](http://localhost:8080/openapi/v1.json) jest dostępny na porcie API. Migracje bazy wykonują się automatycznie podczas startu API.
 
+Jeśli obrazy Budgetly są już zbudowane i chcesz ponownie uruchomić tę samą wersję, użyj `docker compose up -d --no-build --wait`.
+
 Opcjonalnie ustaw BUDGETLY_ADMIN_EMAIL i BUDGETLY_ADMIN_PASSWORD (minimum 12 znaków) przed startem. Aplikacja utworzy konto ADMIN, jeśli podany e-mail jest wolny. Zwykła rejestracja tworzy wyłącznie USER. Zmiana hasła w pliku .env nie zmienia już utworzonego konta.
 
 Dane są przechowywane w wolumenie budgetly-data. Polecenie docker compose down zatrzymuje i usuwa kontenery, zachowując wolumen. Aplikacja i API nasłuchują na interfejsie lokalnym, a baza jest dostępna na wewnętrznej sieci Compose.

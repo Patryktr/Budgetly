@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using Budgetly.Api.Data;
 using Budgetly.Api.Features.Auth.Login;
+using Budgetly.Api.Features.Budgets;
 using Budgetly.Api.Features.Transactions.CreateTransaction;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -65,6 +66,9 @@ public sealed class ApiTests : IAsyncLifetime
         Assert.Equal(-110m, created.Amount);
         Assert.Equal(110m, created.BudgetWarning?.ProjectedSpending);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(response.Headers.Location)).StatusCode);
+        var summary = await client.GetFromJsonAsync<MonthlyBudgetEndpoints.MonthlySummary>("/api/budgets/2026-11");
+        Assert.Equal(-110m, summary!.Balance);
+        Assert.Equal(110m, Assert.Single(summary.Categories).Spending);
     }
 
     [Fact]

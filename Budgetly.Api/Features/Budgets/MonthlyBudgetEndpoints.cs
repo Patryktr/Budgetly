@@ -24,10 +24,12 @@ public static class MonthlyBudgetEndpoints
         var (start, end) = BudgetPolicy.Month(date);
         var transactions = db.Transactions.Where(x => x.UserId == userId && x.Date >= start && x.Date <= end);
         var income = await transactions.Where(x => x.Amount > 0).SumAsync(x => x.Amount, ct);
-        var expenses = await transactions.Where(x => x.Amount < 0)
+        var categorySums = await transactions.Where(x => x.Amount < 0)
             .GroupBy(x => new { x.CategoryId, x.Category!.Name })
-            .Select(g => new CategoryTotal(g.Key.CategoryId, g.Key.Name, -g.Sum(x => x.Amount)))
-            .OrderByDescending(x => x.Spending).ToListAsync(ct);
+            .Select(g => new { g.Key.CategoryId, g.Key.Name, Amount = g.Sum(x => x.Amount) })
+            .ToListAsync(ct);
+        var expenses = categorySums.Select(x => new CategoryTotal(x.CategoryId, x.Name, -x.Amount))
+            .OrderByDescending(x => x.Spending).ToList();
         var budget = await db.MonthlyBudgets.FindAsync([userId, start], ct);
         var spending = expenses.Sum(x => x.Spending);
         return Results.Ok(new MonthlySummary(income, spending, income - spending, budget?.Limit,
