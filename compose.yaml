@@ -1,5 +1,15 @@
 name: budgetly
 services:
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+    restart: unless-stopped
+
   db:
     image: mcr.microsoft.com/mssql/server:2025-latest
     environment:
@@ -27,6 +37,7 @@ services:
       Admin__Email: ${BUDGETLY_ADMIN_EMAIL:-}
       Admin__Password: ${BUDGETLY_ADMIN_PASSWORD:-}
       ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Redis: "redis:6379,abortConnect=false,connectTimeout=1000,connectRetry=0,asyncTimeout=1000"
       ConnectionStrings__Budgetly: "Server=db,1433;Initial Catalog=Budgetly;User ID=sa;Password=${DB_PASSWORD};Encrypt=True;TrustServerCertificate=True"
     ports:
       - "127.0.0.1:8080:8080"

@@ -55,6 +55,18 @@ builder.Services.AddRateLimiter(options =>
         context.Connection.RemoteIpAddress?.ToString() ?? "local",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1) }));
 });
+var redis = builder.Configuration.GetConnectionString("Redis");
+if (string.IsNullOrWhiteSpace(redis))
+    builder.Services.AddDistributedMemoryCache();
+else
+{
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redis;
+        options.InstanceName = "budgetly:";
+    });
+}
+builder.Services.AddScoped<CategoryListCache>();
 builder.Services.AddDbContext<BudgetlyDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("Budgetly")));
 builder.Services.AddScoped<CreateTransactionHandler>();

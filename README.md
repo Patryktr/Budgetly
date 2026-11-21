@@ -4,7 +4,7 @@ Budgetly to aplikacja studencka do prowadzenia domowego budżetu. Rejestrujesz p
 
 ## Uruchomienie
 
-Potrzebujesz Docker Desktop z uruchomionym silnikiem kontenerów linuksowych. Docker buduje Angulara 22 (Node 24), uruchamia go przez nginx, buduje API ASP.NET Core 10 i uruchamia SQL Server 2025 Developer. Instalowanie SDK .NET i Node na komputerze nie jest wymagane.
+Potrzebujesz Docker Desktop z uruchomionym silnikiem kontenerów linuksowych. Docker buduje Angulara 22 (Node 24), uruchamia go przez nginx, buduje API ASP.NET Core 10 oraz uruchamia SQL Server 2025 Developer i Redis 8. Instalowanie SDK .NET i Node na komputerze nie jest wymagane.
 
 1. Jeśli masz już plik .env z ustawionymi sekretami, użyj go. W nowym katalogu skopiuj .env.example jako .env.
 2. Ustaw DB_PASSWORD na silne hasło do deweloperskiego SQL Server i JWT_SIGNING_KEY na osobny losowy sekret o długości co najmniej 32 bajtów. Najprościej wygenerować oba jako ciągi szesnastkowe, dodając do hasła SQL znaki wymagane przez SQL Server, np. prefiks Aa7!. Nie publikuj pliku .env.
@@ -19,6 +19,10 @@ Jeśli obrazy Budgetly są już zbudowane i chcesz ponownie uruchomić tę samą
 Opcjonalnie ustaw BUDGETLY_ADMIN_EMAIL i BUDGETLY_ADMIN_PASSWORD (minimum 12 znaków) przed startem. Aplikacja utworzy konto ADMIN, jeśli podany e-mail jest wolny. Zwykła rejestracja tworzy wyłącznie USER. Zmiana hasła w pliku .env nie zmienia już utworzonego konta.
 
 Dane są przechowywane w wolumenie budgetly-data. Polecenie docker compose down zatrzymuje i usuwa kontenery, zachowując wolumen. Aplikacja i API nasłuchują na interfejsie lokalnym, a baza jest dostępna na wewnętrznej sieci Compose.
+
+## Cache kategorii
+
+- Redis działa w sieci Compose bez portu dostępnego z hosta i bez trwałego wolumenu. API przechowuje listę kategorii osobno dla każdego użytkownika przez minutę. Dodanie, zmiana nazwy i usunięcie kategorii unieważniają wpis po zapisie. Jeśli Redis jest niedostępny, odczyt trafia do SQL Server.
 
 ## Główne funkcje
 

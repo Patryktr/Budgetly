@@ -20,26 +20,25 @@ public static class CategoryEndpoints
         group.MapDelete("/{id:guid}", DeleteAsync);
     }
 
-    private static async Task<List<CategoryResponse>> ListAsync(HttpContext context, BudgetlyDbContext db, CancellationToken ct)
-    {
-        var userId = JwtTokens.UserId(context.User);
-        return await db.Categories.Where(x => x.UserId == null || x.UserId == userId).OrderBy(x => x.Name)
-            .Select(x => new CategoryResponse(x.Id, x.Name, x.Type, x.UserId != null)).ToListAsync(ct);
-    }
+    private static Task<List<CategoryResponse>> ListAsync(HttpContext context, CategoryListCache cache, CancellationToken ct) =>
+        cache.GetAsync(JwtTokens.UserId(context.User), ct);
 
-    private static async Task<IResult> AddAsync(CategoryRequest request, HttpContext context, BudgetlyDbContext db, CancellationToken ct)
+    private static async Task<IResult> AddAsync(CategoryRequest request, HttpContext context, BudgetlyDbContext db,
+        CategoryListCache cache, CancellationToken ct)
     {
         var name = request.Name?.Trim();
         if (name is not { Length: >= 1 and <= 80 } || !Enum.IsDefined(request.Type))
             return Invalid();
-        var item = new Category { Name = name, Type = request.Type, UserId = JwtTokens.UserId(context.User) };
+        var userId = JwtTokens.UserId(context.User);
+        var item = new Category { Name = name, Type = request.Type, UserId = userId };
         db.Categories.Add(item);
         await db.SaveChangesAsync(ct);
+        await cache.InvalidateAsync(userId);
         return Results.Json(new CategoryResponse(item.Id, item.Name, item.Type, true), statusCode: 201);
     }
 
     private static async Task<IResult> RenameAsync(Guid id, RenameCategoryRequest request, HttpContext context,
-        BudgetlyDbContext db, CancellationToken ct)
+        BudgetlyDbContext db, CategoryListCache cache, CancellationToken ct)
     {
         var name = request.Name?.Trim();
         if (name is not { Length: >= 1 and <= 80 }) return Invalid();
@@ -48,10 +47,12 @@ public static class CategoryEndpoints
         if (item is null) return Results.NotFound();
         item.Name = name;
         await db.SaveChangesAsync(ct);
+        await cache.InvalidateAsync(userId);
         return Results.Ok(new CategoryResponse(item.Id, item.Name, item.Type, true));
     }
 
-    private static async Task<IResult> DeleteAsync(Guid id, HttpContext context, BudgetlyDbContext db, CancellationToken ct)
+    private static async Task<IResult> DeleteAsync(Guid id, HttpContext context, BudgetlyDbContext db,
+        CategoryListCache cache, CancellationToken ct)
     {
         var userId = JwtTokens.UserId(context.User);
         var item = await db.Categories.SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, ct);
@@ -65,6 +66,7 @@ public static class CategoryEndpoints
         {
             return Results.Problem(title: "Kategoria jest używana przez transakcje.", statusCode: 409);
         }
+        await cache.InvalidateAsync(userId);
         return Results.NoContent();
     }
 
