@@ -21,6 +21,10 @@ builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddScoped<IPasswordHasher<BudgetlyUser>, PasswordHasher<BudgetlyUser>>();
 builder.Services.AddSingleton<JwtTokens>();
+builder.Services.AddScoped<RegisterHandler>();
+builder.Services.AddScoped<LoginHandler>();
+builder.Services.AddScoped<AdminSummaryHandler>();
+builder.Services.AddScoped<AdminAccountSeeder>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
 {
     options.MapInboundClaims = false;
@@ -76,7 +80,8 @@ if (app.Configuration.GetValue<bool>("Database:ApplyMigrations"))
     await using var scope = app.Services.CreateAsyncScope();
     await scope.ServiceProvider.GetRequiredService<BudgetlyDbContext>().Database.MigrateAsync();
 }
-await app.SeedAdminAsync();
+await using (var scope = app.Services.CreateAsyncScope())
+    await scope.ServiceProvider.GetRequiredService<AdminAccountSeeder>().SeedAsync();
 
 if (app.Environment.IsDevelopment())
 {
