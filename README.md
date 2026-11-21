@@ -20,9 +20,11 @@ Opcjonalnie ustaw BUDGETLY_ADMIN_EMAIL i BUDGETLY_ADMIN_PASSWORD (minimum 12 zna
 
 Dane są przechowywane w wolumenie budgetly-data. Polecenie docker compose down zatrzymuje i usuwa kontenery, zachowując wolumen. Aplikacja i API nasłuchują na interfejsie lokalnym, a baza jest dostępna na wewnętrznej sieci Compose.
 
-## Cache kategorii
+## Cache i limity żądań
 
 - Redis działa w sieci Compose bez portu dostępnego z hosta i bez trwałego wolumenu. API przechowuje listę kategorii osobno dla każdego użytkownika przez minutę. Dodanie, zmiana nazwy i usunięcie kategorii unieważniają wpis po zapisie. Jeśli Redis jest niedostępny, odczyt trafia do SQL Server.
+- Logowanie i rejestracja współdzielą limit 20 żądań na minutę na adres połączenia. W lokalnym Compose żądania z przeglądarki, które przechodzą przez nginx, współdzielą limit proxy.
+- Prywatne żądania API mają osobny limit dla każdego użytkownika. Konto może wysłać do 120 żądań naraz, a limit odnawia się o dwa żądania na sekundę. Po wyczerpaniu limitu API zwraca 429 i nagłówek Retry-After. Liczniki działają w procesie API.
 
 ## Główne funkcje
 

@@ -8,12 +8,12 @@ using Budgetly.Api.Features.Categories;
 using Budgetly.Api.Features.Goals;
 using Budgetly.Api.Features.Transactions.CreateTransaction;
 using Budgetly.Api.Features.Transactions.Manage;
+using Budgetly.Api.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
-using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -48,13 +48,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
 });
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("Admin", policy => policy.RequireRole("ADMIN"));
-builder.Services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddPolicy("auth", context => RateLimitPartition.GetFixedWindowLimiter(
-        context.Connection.RemoteIpAddress?.ToString() ?? "local",
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1) }));
-});
+builder.Services.AddRateLimiter(RequestLimits.Configure);
 var redis = builder.Configuration.GetConnectionString("Redis");
 if (string.IsNullOrWhiteSpace(redis))
     builder.Services.AddDistributedMemoryCache();
@@ -89,8 +83,8 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.UseRateLimiter();
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 app.MapRegister();
 app.MapLogin();

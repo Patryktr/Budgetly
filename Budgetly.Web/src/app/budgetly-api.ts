@@ -24,8 +24,12 @@ export async function request<T>(path: string, session: Session | null, method =
   if (!response.ok) {
     const problem = await response.json().catch(() => ({}));
     const errors = Object.values(problem.errors ?? {}).flat().filter(x => typeof x === 'string');
+    const retryAfter = Number(response.headers.get('Retry-After'));
+    const rateLimitMessage = retryAfter > 0
+      ? 'Za dużo żądań. Spróbuj ponownie za ' + retryAfter + ' s.'
+      : 'Za dużo żądań. Spróbuj ponownie za chwilę.';
     const message = errors.join(' ') || (response.status === 401 ? 'Sprawdź dane logowania lub zaloguj się ponownie.'
-      : response.status === 429 ? 'Za dużo prób. Spróbuj ponownie za minutę.'
+      : response.status === 429 ? rateLimitMessage
       : problem.title || 'Nie udało się wykonać tej operacji.');
     throw new ApiError(response.status, message);
   }
