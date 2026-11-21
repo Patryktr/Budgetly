@@ -10,4 +10,5 @@ public sealed record CreateTransactionRequest(
     DateOnly Date,
     Guid CategoryId,
     [property: StringLength(250)]
-    string? Description);
+    string? Description,
+    bool FromCsv = false);

@@ -5,15 +5,17 @@ export interface EntryInput { amount: number; type: TransactionType; date: strin
 export interface BudgetWarning { limit: number; projectedSpending: number; }
 export interface Entry extends EntryInput { id: string; budgetWarning: BudgetWarning | null; }
 export interface EntryPage { items: Entry[]; total: number; page: number; pageSize: number; }
+export interface MonthSpending { month: string; spending: number; }
 export interface Summary {
   income: number; spending: number; balance: number; limit: number | null; highPriority: boolean;
   categories: { categoryId: string; name: string; spending: number }[];
+  spendingTrend: MonthSpending[];
 }
 export interface GoalInput { name: string; target: number; saved: number; }
 export interface Goal extends GoalInput { id: string; completedAtUtc: string | null; }
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string) { super(message); }
+  constructor(public readonly status: number, message: string, public readonly code?: string) { super(message); }
 }
 
 export async function request<T>(path: string, session: Session | null, method = 'GET', body?: object): Promise<T> {
@@ -31,7 +33,7 @@ export async function request<T>(path: string, session: Session | null, method =
     const message = errors.join(' ') || (response.status === 401 ? 'Sprawdź dane logowania lub zaloguj się ponownie.'
       : response.status === 429 ? rateLimitMessage
       : problem.title || 'Nie udało się wykonać tej operacji.');
-    throw new ApiError(response.status, message);
+    throw new ApiError(response.status, message, typeof problem.code === 'string' ? problem.code : undefined);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;

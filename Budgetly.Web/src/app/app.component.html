@@ -59,6 +59,7 @@
           } @empty { <p>Brak wydatków w tym miesiącu.</p> }
         </div>
       </section>
+      <app-spending-trend [series]="totals.spendingTrend"></app-spending-trend>
     }
 
     <section class="panel">
@@ -79,6 +80,11 @@
         </div>
       </form>
     </section>
+
+    @if (session(); as user) {
+      <app-csv-import [session]="user" [categories]="categories()" [disabled]="busy()"
+        (importRunning)="busy.set($event)" (imported)="refreshAfterCsvImport()"></app-csv-import>
+    }
 
     <section class="panel">
       <div class="section-head">

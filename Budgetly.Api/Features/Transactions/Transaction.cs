@@ -2,7 +2,7 @@ namespace Budgetly.Api.Features.Transactions;
 
 public sealed class Transaction
 {
-    public Guid Id { get; private set; } = Guid.NewGuid();
+    public Guid Id { get; private set; }
     public Guid UserId { get; private set; }
     public Guid CategoryId { get; private set; }
     public Category? Category { get; private set; }
@@ -27,9 +27,10 @@ public sealed class Transaction
         decimal amount,
         TransactionType type,
         DateOnly date,
-        string? description)
+        string? description,
+        Guid? transactionId = null)
     {
-        var transaction = new Transaction { UserId = userId };
+        var transaction = new Transaction { UserId = userId, Id = transactionId ?? Guid.NewGuid() };
         transaction.Update(categoryId, amount, type, date, description);
         return transaction;
     }

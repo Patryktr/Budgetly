@@ -31,8 +31,9 @@ Dane są przechowywane w wolumenie budgetly-data. Polecenie docker compose down 
 - Rejestracja i logowanie z JWT. Token jest ważny przez godzinę. Użytkownik widzi własne dane. ADMIN może odczytać liczbę kont.
 - Transakcje mają kategorię, datę, kwotę i opcjonalny opis. Kwota w formularzu jest dodatnia. Przychód jest zapisywany z plusem, a wydatek z minusem. Kategoria musi pasować do typu transakcji.
 - Historia ma filtry miesiąca, typu i kategorii oraz paginację. Można dodawać, edytować i usuwać transakcje. Kategorie początkowe są wspólne, a kategorie własne są prywatne.
+- Import CSV pozwala wczytać własny plik, wybrać kategorie i zapisać zaznaczone pozycje z podglądu.
 - Jeden limit na miesiąc. Zwykły limit pozwala zapisać wydatek i sygnalizuje przekroczenie. Limit o wysokim priorytecie blokuje zapis lub edycję zwiększającą wydatki ponad limit. Korekta zmniejszająca wydatek w tym samym miesiącu pozostaje możliwa, gdy miesiąc jest już ponad limitem.
-- Podsumowanie pokazuje przychody, wydatki, saldo i wykres kategorii. Cele oszczędnościowe mają ręcznie aktualizowany postęp. Proces w tle co kilka sekund oznacza osiągnięte cele i zapisuje datę osiągnięcia.
+- Podsumowanie pokazuje przychody, wydatki, saldo i wykres kategorii. Wykres Chart.js porównuje wydatki z sześciu miesięcy do wybranego miesiąca włącznie. Cele oszczędnościowe mają ręcznie aktualizowany postęp. Proces w tle co kilka sekund oznacza osiągnięte cele i zapisuje datę osiągnięcia.
 
 ## Model danych
 
@@ -47,6 +48,18 @@ erDiagram
 
 Para UserId i MonthStart jest kluczem budżetu miesięcznego. Brak UserId w kategorii oznacza kategorię wspólną. Limit obejmuje wszystkie wydatki użytkownika w miesiącu wynikającym z daty transakcji.
 
+## Import CSV
+
+W widoku **Importuj transakcje z CSV** można pobrać gotowy szablon. Plik w kodowaniu UTF-8 zawiera do 100 transakcji (do 128 KB). Kolumny są oddzielone średnikiem, kwota jest dodatnia, a separator dziesiętny może być przecinkiem lub kropką. Nazwa kategorii może być pusta, jeśli wybierzesz ją w podglądzie.
+
+```csv
+data;typ;kwota;kategoria;opis
+2026-11-16;wydatek;27,50;Zakupy spożywcze;Zakupy
+2026-11-16;przychód;1000;Wynagrodzenie;Wypłata
+```
+
+Wiersze są zapisywane kolejno w porządku pliku. Każdy wydatek przechodzi zwykłą kontrolę budżetu. Powtórny import identycznej pozycji CSV przez to samo konto zgłasza duplikat, jeśli oryginalny wpis wciąż istnieje. Identyczność uwzględnia datę, rodzaj, kwotę, wybraną kategorię i opis. Podgląd działa w przeglądarce, a do API trafiają wyłącznie wybrane pozycje.
+
 ## REST API
 
 | Metoda i ścieżka | Przeznaczenie |
@@ -58,9 +71,9 @@ Para UserId i MonthStart jest kluczem budżetu miesięcznego. Brak UserId w kate
 | POST /api/categories | Tworzy kategorię z name i type. |
 | PUT, DELETE /api/categories/{id} | Zmienia nazwę (name) lub usuwa własną kategorię. |
 | GET /api/transactions | Historia z parametrami from, to, type, categoryId, page i pageSize. |
-| POST /api/transactions | Tworzy transakcję z amount, type, date, categoryId i opcjonalnym description. |
+| POST /api/transactions | Tworzy transakcję z amount, type, date, categoryId i opcjonalnym description. Pole fromCsv włącza wykrywanie powtórnego importu. |
 | GET, PUT, DELETE /api/transactions/{id} | Odczytuje, aktualizuje lub usuwa własną transakcję. |
-| GET /api/budgets/{month} | Zwraca limit i podsumowanie dla miesiąca RRRR-MM. |
+| GET /api/budgets/{month} | Zwraca limit, podsumowanie miesiąca RRRR-MM i serię wydatków `spendingTrend`. |
 | PUT, DELETE /api/budgets/{month} | Ustawia limit (limit i highPriority) lub usuwa limit. |
 | GET, POST /api/goals | Listuje lub tworzy cele. Formularz celu ma pola name, target i saved. |
 | PUT, DELETE /api/goals/{id} | Edytuje lub usuwa własny cel. |

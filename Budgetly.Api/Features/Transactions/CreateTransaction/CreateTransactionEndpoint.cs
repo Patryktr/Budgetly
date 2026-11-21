@@ -30,6 +30,11 @@ public static class CreateTransactionEndpoint
             return Results.Unauthorized();
 
         var result = await handler.HandleAsync(userId, request, cancellationToken);
+        if (result.AlreadyImported)
+            return Results.Problem(
+                title: "Taka pozycja CSV została już zaimportowana.",
+                statusCode: StatusCodes.Status409Conflict,
+                extensions: new Dictionary<string, object?> { ["code"] = "duplicate_csv" });
         if (result.ExceededBudget is { } exceeded)
             return Results.Problem(
                 title: "Wydatek przekracza miesięczny limit o wysokim priorytecie.",

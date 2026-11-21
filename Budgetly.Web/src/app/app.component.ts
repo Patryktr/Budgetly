@@ -1,6 +1,8 @@
 import { Component, signal } from '@angular/core';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { CsvImportComponent } from './csv-import/csv-import.component';
+import { SpendingTrendComponent } from './spending-trend.component';
 import { ApiError, Category, Entry, EntryInput, EntryPage, Goal, GoalInput, Session, Summary, TransactionType, request } from './budgetly-api';
 
 function today(): string {
@@ -20,7 +22,7 @@ function storedSession(): Session | null {
 
 @Component({
   selector: 'app-root',
-  imports: [CurrencyPipe, DatePipe, FormsModule],
+  imports: [CurrencyPipe, DatePipe, FormsModule, SpendingTrendComponent, CsvImportComponent],
   templateUrl: './app.component.html'
 })
 export class AppComponent {
@@ -96,6 +98,11 @@ export class AppComponent {
   async changePage(page: number) {
     this.page = page;
     await this.run(() => this.loadHistory());
+  }
+
+  async refreshAfterCsvImport() {
+    this.page = 1;
+    await this.run(() => this.refresh());
   }
 
   async saveEntry() {
