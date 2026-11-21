@@ -48,6 +48,7 @@ public sealed class BudgetlyDbContext(DbContextOptions<BudgetlyDbContext> option
             entity.HasIndex(x => new { x.UserId, x.Date });
             entity.HasOne<BudgetlyUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Category).WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<SavingsGoal>().WithMany().HasForeignKey(x => x.GoalId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Category>(entity =>
@@ -61,7 +62,8 @@ public sealed class BudgetlyDbContext(DbContextOptions<BudgetlyDbContext> option
                 new { Id = Guid.Parse("11111111-1111-4111-8111-111111111111"), Name = "Wynagrodzenie", Type = TransactionType.Income },
                 new { Id = Guid.Parse("22222222-2222-4222-8222-222222222222"), Name = "Zakupy spożywcze", Type = TransactionType.Expense },
                 new { Id = Guid.Parse("33333333-3333-4333-8333-333333333333"), Name = "Transport", Type = TransactionType.Expense },
-                new { Id = Guid.Parse("44444444-4444-4444-8444-444444444444"), Name = "Mieszkanie", Type = TransactionType.Expense });
+                new { Id = Guid.Parse("44444444-4444-4444-8444-444444444444"), Name = "Mieszkanie", Type = TransactionType.Expense },
+                new { Id = SavingsGoal.CategoryId, Name = "Oszczędności", Type = TransactionType.Expense });
         });
     }
 }

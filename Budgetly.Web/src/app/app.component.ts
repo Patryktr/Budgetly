@@ -3,7 +3,7 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CsvImportComponent } from './csv-import/csv-import.component';
 import { SpendingTrendComponent } from './spending-trend.component';
-import { ApiError, Category, Entry, EntryInput, EntryPage, Goal, GoalInput, Session, Summary, TransactionType, request } from './budgetly-api';
+import { ApiError, Category, Entry, EntryInput, EntryPage, Goal, GoalInput, GoalContribution, GoalContributionResult, Session, Summary, TransactionType, request, savingsCategoryId } from './budgetly-api';
 
 function today(): string {
   const now = new Date();
@@ -43,14 +43,17 @@ export class AppComponent {
   highPriority = false;
   entry: EntryInput = this.emptyEntry();
   editId: string | null = null;
+  entryIsSavings = false;
   filterType = '';
   filterCategory = '';
   page = 1;
   categoryName = '';
   categoryType: TransactionType = 2;
   categoryEditId: string | null = null;
-  goal: GoalInput = { name: '', target: 0, saved: 0 };
+  goal: GoalInput = { name: '', target: 0 };
   goalId: string | null = null;
+  contributionGoal: Goal | null = null;
+  contribution: GoalContribution = { amount: 0, date: today() };
 
   constructor() {
     if (this.session()) void this.run(() => this.refresh(true));
@@ -85,6 +88,7 @@ export class AppComponent {
     this.highPriority = false;
     this.clearEntry();
     this.clearGoal();
+    this.clearContribution();
     this.categoryName = '';
     this.categoryEditId = null;
   }
@@ -126,12 +130,14 @@ export class AppComponent {
 
   editEntry(item: Entry) {
     this.editId = item.id;
+    this.entryIsSavings = item.isSavings;
     this.entry = { amount: Math.abs(item.amount), date: item.date, type: item.type,
       categoryId: item.categoryId, description: item.description ?? '' };
   }
 
   clearEntry() {
     this.editId = null;
+    this.entryIsSavings = false;
     this.entry = this.emptyEntry();
   }
 
@@ -201,20 +207,45 @@ export class AppComponent {
 
   editGoal(goal: Goal) {
     this.goalId = goal.id;
-    this.goal = { name: goal.name, target: goal.target, saved: goal.saved };
+    this.goal = { name: goal.name, target: goal.target };
   }
 
   clearGoal() {
     this.goalId = null;
-    this.goal = { name: '', target: 0, saved: 0 };
+    this.goal = { name: '', target: 0 };
   }
 
   async deleteGoal(id: string) {
-    if (!window.confirm('Usunąć cel?')) return;
+    if (!window.confirm('Usunąć cel? Jego wpłaty pozostaną w historii i nadal będą pomniejszać saldo.')) return;
     await this.run(async () => {
       await this.call('/goals/' + id, 'DELETE');
       if (this.goalId === id) this.clearGoal();
+      if (this.contributionGoal?.id === id) this.clearContribution();
       this.goals.set(await this.call<Goal[]>('/goals'));
+    });
+  }
+
+  openContribution(goal: Goal) {
+    this.contributionGoal = goal;
+    this.contribution = { amount: 0, date: today() };
+    requestAnimationFrame(() => document.getElementById('goal-contribution')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+  }
+
+  clearContribution() {
+    this.contributionGoal = null;
+    this.contribution = { amount: 0, date: today() };
+  }
+
+  async contributeToGoal() {
+    const goal = this.contributionGoal;
+    if (!goal) return;
+    await this.run(async () => {
+      const result = await this.call<GoalContributionResult>('/goals/' + goal.id + '/contributions', 'POST', this.contribution);
+      this.month = result.transaction.date.slice(0, 7);
+      this.page = 1;
+      this.clearContribution();
+      await this.refresh(true);
+      this.message.set('Zapisano wpłatę na cel „' + result.goal.name + '”. Kwota pomniejsza saldo i nie zużywa limitu wydatków.');
     });
   }
 
@@ -223,7 +254,12 @@ export class AppComponent {
   }
 
   get entryCategories() {
-    return this.categories().filter(category => category.type === this.entry.type);
+    return this.categories().filter(category => category.type === this.entry.type &&
+      (this.entryIsSavings ? category.id === savingsCategoryId : category.id !== savingsCategoryId));
+  }
+
+  get transactionCategories() {
+    return this.categories().filter(category => category.id !== savingsCategoryId);
   }
 
   private async refresh(resetBudget = false) {

@@ -9,6 +9,8 @@ public sealed record CreateTransactionResponse(
     DateOnly Date,
     Guid CategoryId,
     string? Description,
-    BudgetLimitWarning? BudgetWarning);
+    BudgetLimitWarning? BudgetWarning,
+    Guid? GoalId = null,
+    bool IsSavings = false);
 
 public sealed record BudgetLimitWarning(decimal Limit, decimal ProjectedSpending);

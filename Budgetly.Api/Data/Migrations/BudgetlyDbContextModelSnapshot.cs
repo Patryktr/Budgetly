@@ -151,6 +151,12 @@ namespace Budgetly.Api.Data.Migrations
                             Id = new Guid("44444444-4444-4444-8444-444444444444"),
                             Name = "Mieszkanie",
                             Type = "Expense"
+                        },
+                        new
+                        {
+                            Id = new Guid("55555555-5555-4555-8555-555555555555"),
+                            Name = "Oszczędności",
+                            Type = "Expense"
                         });
                 });
 
@@ -177,12 +183,20 @@ namespace Budgetly.Api.Data.Migrations
                         .HasMaxLength(250)
                         .HasColumnType("nvarchar(250)");
 
+                    b.Property<Guid?>("GoalId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsSavings")
+                        .HasColumnType("bit");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
 
                     b.HasIndex("CategoryId");
+
+                    b.HasIndex("GoalId");
 
                     b.HasIndex("UserId", "Date");
 
@@ -222,6 +236,11 @@ namespace Budgetly.Api.Data.Migrations
                         .HasForeignKey("CategoryId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Budgetly.Api.Features.Goals.SavingsGoal", null)
+                        .WithMany()
+                        .HasForeignKey("GoalId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Budgetly.Api.Features.Auth.BudgetlyUser", null)
                         .WithMany()

@@ -2,6 +2,7 @@ using Budgetly.Api.Application;
 using System.Data;
 using Budgetly.Api.Data;
 using Budgetly.Api.Features.Budgets;
+using Budgetly.Api.Features.Goals;
 using Budgetly.Api.Features.Transactions.CreateTransaction;
 using Microsoft.EntityFrameworkCore;
 
@@ -51,13 +52,15 @@ public sealed class TransactionHandler(BudgetlyDbContext db)
         var item = await db.Transactions.SingleOrDefaultAsync(x => x.UserId == userId && x.Id == id, ct);
         if (item is null)
             return HandlerError.NotFound();
+        if (item.IsSavings && (request.Type != TransactionType.Expense || request.CategoryId != item.CategoryId))
+            return Invalid("transaction", "Wpłata na oszczędności musi zachować swój typ i kategorię.");
         var category = await db.Categories.SingleOrDefaultAsync(
             x => x.Id == request.CategoryId && (x.UserId == null || x.UserId == userId), ct);
         if (category is null || category.Type != request.Type)
             return Invalid("categoryId", "Wybierz dostępną kategorię zgodną z typem transakcji.");
 
         BudgetLimitWarning? warning = null;
-        if (request.Type == TransactionType.Expense)
+        if (request.Type == TransactionType.Expense && !item.IsSavings)
         {
             var evaluation = await BudgetPolicy.EvaluateAsync(db, userId, request.Date, request.Amount, id, ct);
             var reducesSameMonth = item.Amount < 0 && BudgetPolicy.Month(item.Date).Start == BudgetPolicy.Month(request.Date).Start
@@ -67,6 +70,18 @@ public sealed class TransactionHandler(BudgetlyDbContext db)
             warning = evaluation.Warning;
         }
 
+        if (!item.IsSavings && request.CategoryId == SavingsGoal.CategoryId)
+            return Invalid("categoryId", "Wpłatę na oszczędności dodaj przy wybranym celu.");
+
+        if (item.GoalId is { } goalId)
+        {
+            var goal = await db.Goals.SingleAsync(x => x.Id == goalId && x.UserId == userId, ct);
+            var difference = request.Amount + item.Amount;
+            var nextSaved = goal.Saved + difference;
+            if (nextSaved != 0 && !BudgetPolicy.ValidMoney(nextSaved))
+                return Invalid("amount", "Łączna kwota oszczędności musi wynosić od 0 do 999 999 999,99 zł.");
+            goal.AdjustSaved(difference);
+        }
         item.Update(request.CategoryId, request.Amount, request.Type, request.Date, request.Description);
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
@@ -75,13 +90,23 @@ public sealed class TransactionHandler(BudgetlyDbContext db)
 
     public async Task<HandlerResult<bool>> DeleteAsync(Guid userId, Guid id, CancellationToken ct)
     {
-        var count = await db.Transactions.Where(x => x.UserId == userId && x.Id == id).ExecuteDeleteAsync(ct);
-        return count == 0 ? HandlerError.NotFound() : HandlerResult<bool>.Success(true);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        var item = await db.Transactions.SingleOrDefaultAsync(x => x.UserId == userId && x.Id == id, ct);
+        if (item is null) return HandlerError.NotFound();
+        if (item.GoalId is { } goalId)
+        {
+            var goal = await db.Goals.SingleAsync(x => x.Id == goalId && x.UserId == userId, ct);
+            goal.AdjustSaved(item.Amount);
+        }
+        db.Transactions.Remove(item);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        return HandlerResult<bool>.Success(true);
     }
 
     private static CreateTransactionResponse Response(Transaction x, BudgetLimitWarning? warning = null) =>
         new(x.Id, x.Amount, x.Amount > 0 ? TransactionType.Income : TransactionType.Expense,
-            x.Date, x.CategoryId, x.Description, warning);
+            x.Date, x.CategoryId, x.Description, warning, x.GoalId, x.IsSavings);
 
     private static HandlerError Invalid(string field, string message) =>
         HandlerError.Invalid(new Dictionary<string, string[]> { [field] = [message] });

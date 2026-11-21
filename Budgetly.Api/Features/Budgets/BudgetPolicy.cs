@@ -26,7 +26,7 @@ public static class BudgetPolicy
         if (budget is null)
             return (null, false);
 
-        var expenses = db.Transactions.Where(x => x.UserId == userId && x.Date >= start && x.Date <= end && x.Amount < 0);
+        var expenses = db.Transactions.Where(x => x.UserId == userId && x.Date >= start && x.Date <= end && x.Amount < 0 && !x.IsSavings);
         if (excludedId is { } id)
             expenses = expenses.Where(x => x.Id != id);
         var spent = -await expenses.SumAsync(x => x.Amount, ct);

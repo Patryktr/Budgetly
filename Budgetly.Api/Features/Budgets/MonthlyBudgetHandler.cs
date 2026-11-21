@@ -15,7 +15,8 @@ public sealed class MonthlyBudgetHandler(BudgetlyDbContext db)
         var (start, end) = BudgetPolicy.Month(date);
         var transactions = db.Transactions.Where(x => x.UserId == userId && x.Date >= start && x.Date <= end);
         var income = await transactions.Where(x => x.Amount > 0).SumAsync(x => x.Amount, ct);
-        var categorySums = await transactions.Where(x => x.Amount < 0)
+        var savings = -await transactions.Where(x => x.IsSavings).SumAsync(x => x.Amount, ct);
+        var categorySums = await transactions.Where(x => x.Amount < 0 && !x.IsSavings)
             .GroupBy(x => new { x.CategoryId, x.Category!.Name })
             .Select(g => new { g.Key.CategoryId, g.Key.Name, Amount = g.Sum(x => x.Amount) })
             .ToListAsync(ct);
@@ -24,8 +25,8 @@ public sealed class MonthlyBudgetHandler(BudgetlyDbContext db)
         var budget = await db.MonthlyBudgets.FindAsync([userId, start], ct);
         var spending = expenses.Sum(x => x.Spending);
         var trend = await LoadSpendingTrendAsync(userId, start, end, ct);
-        return HandlerResult<MonthlySummary>.Success(new MonthlySummary(income, spending, income - spending, budget?.Limit,
-            budget?.HighPriority ?? false, expenses, trend));
+        return HandlerResult<MonthlySummary>.Success(new MonthlySummary(income, spending, income - spending - savings, budget?.Limit,
+            budget?.HighPriority ?? false, expenses, trend, savings));
     }
 
     private async Task<List<MonthSpending>> LoadSpendingTrendAsync(
@@ -34,7 +35,7 @@ public sealed class MonthlyBudgetHandler(BudgetlyDbContext db)
         var monthCount = Math.Min(TrendMonths, (selectedMonth.Year - 1) * 12 + selectedMonth.Month);
         var firstMonth = selectedMonth.AddMonths(1 - monthCount);
         var monthlyTotals = await db.Transactions
-            .Where(x => x.UserId == userId && x.Amount < 0 && x.Date >= firstMonth && x.Date <= end)
+            .Where(x => x.UserId == userId && x.Amount < 0 && !x.IsSavings && x.Date >= firstMonth && x.Date <= end)
             .GroupBy(x => new { x.Date.Year, x.Date.Month })
             .Select(g => new { g.Key.Year, g.Key.Month, Total = g.Sum(x => x.Amount) })
             .ToDictionaryAsync(x => (x.Year, x.Month), x => -x.Total, ct);

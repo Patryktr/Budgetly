@@ -7,6 +7,7 @@ using Budgetly.Api.Features.Auth.Login;
 using Budgetly.Api.Features.Budgets;
 using Budgetly.Api.Features.Categories;
 using Budgetly.Api.Features.Goals;
+using Budgetly.Api.Features.Goals.Contribute;
 using Budgetly.Api.Features.Transactions.CreateTransaction;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -140,10 +141,10 @@ public sealed class ApiTests : IAsyncLifetime
             (await client.PutAsJsonAsync("/api/budgets/invalid", new { limit = 50 })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,
             (await client.PostAsJsonAsync("/api/goals", new { name = "Trip", target = 0, saved = 0 })).StatusCode);
-        var created = await client.PostAsJsonAsync("/api/goals", new { name = "Trip", target = 100, saved = 30 });
+        var created = await client.PostAsJsonAsync("/api/goals", new { name = "Trip", target = 100 });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var goal = (await created.Content.ReadFromJsonAsync<GoalResponse>())!;
-        Assert.Equal(30m, goal.Saved);
+        Assert.Equal(0m, goal.Saved);
 
         using var other = factory.CreateClient();
         await SignInAsync(other, "other-goals@example.test");
@@ -152,7 +153,7 @@ public sealed class ApiTests : IAsyncLifetime
             (await other.PutAsJsonAsync("/api/goals/" + goal.Id, new { name = "Trip", target = 100, saved = 40 })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await other.DeleteAsync("/api/goals/" + goal.Id)).StatusCode);
 
-        var edited = await client.PutAsJsonAsync("/api/goals/" + goal.Id, new { name = "Travel", target = 100, saved = 40 });
+        var edited = await client.PutAsJsonAsync("/api/goals/" + goal.Id, new { name = "Travel", target = 100 });
         Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
         Assert.Equal("Travel", (await edited.Content.ReadFromJsonAsync<GoalResponse>())!.Name);
         Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync("/api/goals/" + goal.Id)).StatusCode);
@@ -160,6 +161,145 @@ public sealed class ApiTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync("/api/budgets/2026-11")).StatusCode);
         var summary = await client.GetFromJsonAsync<MonthlySummary>("/api/budgets/2026-11");
         Assert.Null(summary!.Limit);
+    }
+
+    [Fact]
+    public async Task GoalContributionReducesBalanceOutsideStrictExpenseLimitAndAllowsOverfunding()
+    {
+        await SignInAsync(client, "funding@example.test");
+        await SetBudgetAsync(true);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/api/transactions", Expense(100))).StatusCode);
+        var goal = await CreateGoalAsync(50);
+        var response = await client.PostAsJsonAsync($"/api/goals/{goal.Id}/contributions", new { amount = 60, date = "2026-11-15" });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var contribution = (await response.Content.ReadFromJsonAsync<ContributeToGoalResponse>())!;
+        Assert.Equal(60m, contribution.Goal.Saved);
+        Assert.Equal(-60m, contribution.Transaction.Amount);
+        Assert.True(contribution.Transaction.IsSavings);
+        Assert.Equal(goal.Id, contribution.Transaction.GoalId);
+        var summary = (await client.GetFromJsonAsync<MonthlySummary>("/api/budgets/2026-11"))!;
+        Assert.Equal(100m, summary.Spending);
+        Assert.Equal(60m, summary.Savings);
+        Assert.Equal(-160m, summary.Balance);
+        Assert.Equal(100m, Assert.Single(summary.Categories).Spending);
+        Assert.Equal(100m, summary.SpendingTrend.Single(x => x.Month == "2026-11").Spending);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync("/api/transactions", Expense(0.01m))).StatusCode);
+    }
+
+    [Fact]
+    public async Task SavingsTransfersDoNotUseExpenseAllowanceWhenOrdinaryExpenseIsEdited()
+    {
+        await SignInAsync(client, "allowance@example.test");
+        await SetBudgetAsync(true);
+        var goal = await CreateGoalAsync(1000);
+        await ContributeAsync(goal.Id, 500);
+        var expense = await client.PostAsJsonAsync("/api/transactions", Expense(90));
+        Assert.Equal(HttpStatusCode.Created, expense.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PutAsJsonAsync(expense.Headers.Location, Expense(100))).StatusCode);
+        var summary = (await client.GetFromJsonAsync<MonthlySummary>("/api/budgets/2026-11"))!;
+        Assert.Equal(100m, summary.Spending);
+        Assert.Equal(500m, summary.Savings);
+    }
+
+    [Fact]
+    public async Task EditingAndDeletingContributionUpdatesGoalAndCompletionAtomically()
+    {
+        await SignInAsync(client, "adjust-funding@example.test");
+        var goal = await CreateGoalAsync(100);
+        var contribution = await ContributeAsync(goal.Id, 100);
+        await using (var scope = factory.Services.CreateAsyncScope())
+            Assert.Equal(1, await scope.ServiceProvider.GetRequiredService<CompleteGoalsHandler>().HandleAsync(default));
+        Assert.NotNull(Assert.Single((await client.GetFromJsonAsync<List<GoalResponse>>("/api/goals"))!).CompletedAtUtc);
+        var id = contribution.Transaction.Id;
+        var corrected = await client.PutAsJsonAsync("/api/transactions/" + id, new
+        {
+            amount = 40, type = 2, date = "2026-11-16", categoryId = SavingsGoal.CategoryId, description = "Korekta wpłaty"
+        });
+        Assert.Equal(HttpStatusCode.OK, corrected.StatusCode);
+        var saved = Assert.Single((await client.GetFromJsonAsync<List<GoalResponse>>("/api/goals"))!);
+        Assert.Equal(40m, saved.Saved);
+        Assert.Null(saved.CompletedAtUtc);
+        var invalid = await client.PutAsJsonAsync("/api/transactions/" + id, new
+        {
+            amount = 40, type = 1, date = "2026-11-16", categoryId = "11111111-1111-4111-8111-111111111111"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync("/api/transactions/" + id)).StatusCode);
+        Assert.Equal(0m, Assert.Single((await client.GetFromJsonAsync<List<GoalResponse>>("/api/goals"))!).Saved);
+        var summary = (await client.GetFromJsonAsync<MonthlySummary>("/api/budgets/2026-11"))!;
+        Assert.Equal(0m, summary.Savings);
+        Assert.Equal(0m, summary.Balance);
+    }
+
+    [Fact]
+    public async Task DeletingGoalPreservesTransfersAndTheirExclusionFromExpenseBudget()
+    {
+        await SignInAsync(client, "delete-funded-goal@example.test");
+        var goal = await CreateGoalAsync(100);
+        var contribution = await ContributeAsync(goal.Id, 60);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync("/api/goals/" + goal.Id)).StatusCode);
+        var transfer = (await client.GetFromJsonAsync<CreateTransactionResponse>("/api/transactions/" + contribution.Transaction.Id))!;
+        Assert.Null(transfer.GoalId);
+        Assert.True(transfer.IsSavings);
+        Assert.Equal(-60m, transfer.Amount);
+        await SetBudgetAsync(true);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/api/transactions", Expense(100))).StatusCode);
+        var summary = (await client.GetFromJsonAsync<MonthlySummary>("/api/budgets/2026-11"))!;
+        Assert.Equal(100m, summary.Spending);
+        Assert.Equal(60m, summary.Savings);
+        Assert.Equal(-160m, summary.Balance);
+    }
+
+    [Fact]
+    public async Task ContributionsValidateOwnershipAmountAndDateWithoutChangingData()
+    {
+        await SignInAsync(client, "private-funding@example.test");
+        var goal = await CreateGoalAsync(100);
+        using var other = factory.CreateClient();
+        await SignInAsync(other, "other-funding@example.test");
+        Assert.Equal(HttpStatusCode.NotFound, (await other.PostAsJsonAsync($"/api/goals/{goal.Id}/contributions",
+            new { amount = 10, date = "2026-11-15" })).StatusCode);
+        foreach (var amount in new[] { 0m, -1m, 1.001m })
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/goals/{goal.Id}/contributions",
+                new { amount, date = "2026-11-15" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/goals/{goal.Id}/contributions",
+            new { amount = 10 })).StatusCode);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<BudgetlyDbContext>();
+        Assert.Empty(await db.Transactions.ToListAsync());
+        Assert.Equal(0m, (await db.Goals.SingleAsync()).Saved);
+    }
+
+    [Fact]
+    public async Task GoalSavingsCannotBeChangedDirectlyAndOverflowLeavesNoExtraTransfer()
+    {
+        await SignInAsync(client, "funding-validation@example.test");
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/goals",
+            new { name = "Trip", target = 100, saved = 50 })).StatusCode);
+        var goal = await CreateGoalAsync(100);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync("/api/goals/" + goal.Id,
+            new { name = "Trip", target = 100, saved = 50 })).StatusCode);
+        await ContributeAsync(goal.Id, 999999999.99m);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync($"/api/goals/{goal.Id}/contributions",
+            new { amount = 0.01, date = "2026-11-15" })).StatusCode);
+        var saved = Assert.Single((await client.GetFromJsonAsync<List<GoalResponse>>("/api/goals"))!);
+        Assert.Equal(999999999.99m, saved.Saved);
+        await using var scope = factory.Services.CreateAsyncScope();
+        Assert.Equal(1, await scope.ServiceProvider.GetRequiredService<BudgetlyDbContext>().Transactions.CountAsync());
+    }
+
+    private async Task<GoalResponse> CreateGoalAsync(decimal target)
+    {
+        var response = await client.PostAsJsonAsync("/api/goals", new { name = "Trip", target });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<GoalResponse>())!;
+    }
+
+    private async Task<ContributeToGoalResponse> ContributeAsync(Guid goalId, decimal amount)
+    {
+        var response = await client.PostAsJsonAsync($"/api/goals/{goalId}/contributions", new { amount, date = "2026-11-15" });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<ContributeToGoalResponse>())!;
     }
 
     private async Task SetBudgetAsync(bool highPriority)

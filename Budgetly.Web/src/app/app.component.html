@@ -30,9 +30,10 @@
 
     @if (summary(); as totals) {
       <section class="metrics" aria-label="Podsumowanie miesiąca">
-        <div><span>Saldo</span><strong>{{ totals.balance | currency:'PLN' }}</strong></div>
+        <div><span>Dostępne saldo</span><strong>{{ totals.balance | currency:'PLN' }}</strong></div>
         <div><span>Przychody</span><strong>{{ totals.income | currency:'PLN' }}</strong></div>
         <div><span>Wydatki</span><strong>{{ totals.spending | currency:'PLN' }}</strong></div>
+        <div><span>Wpłaty na oszczędności</span><strong>{{ totals.savings | currency:'PLN' }}</strong></div>
       </section>
       @if (totals.limit !== null && totals.spending > totals.limit) {
         <p class="notice" role="status">Wydatki w tym miesiącu przekraczają limit o {{ totals.spending - totals.limit | currency:'PLN' }}.</p>
@@ -63,14 +64,15 @@
     }
 
     <section class="panel">
-      <h2>{{ editId ? 'Edytuj transakcję' : 'Dodaj transakcję' }}</h2>
+      <h2>{{ editId ? (entryIsSavings ? 'Edytuj wpłatę na oszczędności' : 'Edytuj transakcję') : 'Dodaj transakcję' }}</h2>
+      @if (entryIsSavings) { <p>Korekta kwoty zaktualizuje także powiązany cel. Wpłata pozostaje poza limitem wydatków.</p> }
       <form class="fields cols" (ngSubmit)="saveEntry()" #entryForm="ngForm">
-        <label>Typ<select name="type" [(ngModel)]="entry.type" (ngModelChange)="entry.categoryId = ''">
-          <option [ngValue]="2">Wydatek</option><option [ngValue]="1">Przychód</option>
+        <label>Typ<select name="type" [(ngModel)]="entry.type" (ngModelChange)="entry.categoryId = ''" [disabled]="entryIsSavings">
+          <option [ngValue]="2">{{ entryIsSavings ? 'Wpłata na oszczędności' : 'Wydatek' }}</option><option [ngValue]="1">Przychód</option>
         </select></label>
         <label>Kwota w PLN<input name="amount" type="number" required min="0.01" max="999999999.99" step="0.01" [(ngModel)]="entry.amount"></label>
         <label>Data<input name="date" type="date" required [(ngModel)]="entry.date"></label>
-        <label>Kategoria<select name="category" required [(ngModel)]="entry.categoryId">
+        <label>Kategoria<select name="category" required [(ngModel)]="entry.categoryId" [disabled]="entryIsSavings">
           <option value="">Wybierz</option>
           @for (category of entryCategories; track category.id) { <option [value]="category.id">{{ category.name }}</option> }
         </select></label>
@@ -82,7 +84,7 @@
     </section>
 
     @if (session(); as user) {
-      <app-csv-import [session]="user" [categories]="categories()" [disabled]="busy()"
+      <app-csv-import [session]="user" [categories]="transactionCategories" [disabled]="busy()"
         (importRunning)="busy.set($event)" (imported)="refreshAfterCsvImport()"></app-csv-import>
     }
 
@@ -104,7 +106,8 @@
           <thead><tr><th>Data</th><th>Kategoria</th><th>Opis</th><th>Kwota</th><th>Akcje</th></tr></thead>
           <tbody>
             @for (item of list.items; track item.id) {
-              <tr><td>{{ item.date }}</td><td>{{ categoryLabel(item.categoryId) }}</td><td>{{ item.description || '—' }}</td>
+              <tr><td>{{ item.date }}</td><td>{{ categoryLabel(item.categoryId) }}</td><td>{{ item.description || '—' }}
+                @if (item.isSavings) { <small class="savings-label">Wpłata na oszczędności · poza limitem</small> }</td>
                 <td [class.negative]="item.amount < 0">{{ item.amount | currency:'PLN' }}</td>
                 <td><div class="actions"><button class="secondary" [disabled]="busy()" (click)="editEntry(item)">Edytuj</button>
                   <button class="secondary danger" [disabled]="busy()" (click)="deleteEntry(item.id)">Usuń</button></div></td></tr>
@@ -121,20 +124,32 @@
     <section class="grid">
       <div class="panel">
         <h2>Cele oszczędnościowe</h2>
+        <p>Wpłata na cel pomniejsza dostępne saldo, ale nie zużywa miesięcznego limitu wydatków. Nowy cel zaczyna od 0 zł.</p>
         <form class="fields cols" #goalForm="ngForm" (ngSubmit)="saveGoal()">
           <label class="wide">Nazwa<input name="goalName" maxlength="100" required [(ngModel)]="goal.name"></label>
           <label>Kwota docelowa<input name="target" type="number" min="0.01" max="999999999.99" step="0.01" required [(ngModel)]="goal.target"></label>
-          <label>Odłożona kwota<input name="saved" type="number" min="0" max="999999999.99" step="0.01" required [(ngModel)]="goal.saved"></label>
           <div class="actions"><button [disabled]="busy() || goalForm.invalid">{{ goalId ? 'Zapisz zmiany' : 'Dodaj cel' }}</button>
             @if (goalId) { <button type="button" class="secondary" (click)="clearGoal()">Anuluj</button> }
           </div>
         </form>
+        @if (contributionGoal; as selectedGoal) {
+          <form id="goal-contribution" class="fields cols contribution-form" #contributionForm="ngForm" (ngSubmit)="contributeToGoal()">
+            <h3 class="wide">Wpłata na cel: {{ selectedGoal.name }}</h3>
+            <label>Kwota wpłaty<input name="contributionAmount" type="number" min="0.01" max="999999999.99" step="0.01" required [(ngModel)]="contribution.amount"></label>
+            <label>Data wpłaty<input name="contributionDate" type="date" required [(ngModel)]="contribution.date"></label>
+            <div class="actions">
+              <button [disabled]="busy() || contributionForm.invalid">Zapisz wpłatę</button>
+              <button type="button" class="secondary" [disabled]="busy()" (click)="clearContribution()">Anuluj wpłatę</button>
+            </div>
+          </form>
+        }
         <ul class="items">
           @for (savedGoal of goals(); track savedGoal.id) {
             <li><div><strong>{{ savedGoal.name }}</strong><br><span>{{ savedGoal.saved | currency:'PLN' }} / {{ savedGoal.target | currency:'PLN' }}</span>
               @if (savedGoal.saved >= savedGoal.target) { <span> · Osiągnięty</span> }
               @if (savedGoal.completedAtUtc) { <span> {{ savedGoal.completedAtUtc | date:'mediumDate' }}</span> }
-            </div><div class="actions"><button class="secondary" [disabled]="busy()" (click)="editGoal(savedGoal)">Edytuj</button>
+            </div><div class="actions"><button [disabled]="busy()" (click)="openContribution(savedGoal)">Wpłać</button>
+                <button class="secondary" [disabled]="busy()" (click)="editGoal(savedGoal)">Edytuj</button>
                 <button class="secondary danger" [disabled]="busy()" (click)="deleteGoal(savedGoal.id)">Usuń</button></div></li>
           }
         </ul>

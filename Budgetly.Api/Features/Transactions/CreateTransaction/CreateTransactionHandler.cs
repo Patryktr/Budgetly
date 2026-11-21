@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Budgetly.Api.Data;
 using Budgetly.Api.Features.Budgets;
+using Budgetly.Api.Features.Goals;
 using Budgetly.Api.Features.Transactions;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -41,6 +42,9 @@ public sealed class CreateTransactionHandler(BudgetlyDbContext dbContext)
 
         if (category.Type != request.Type)
             return CreateTransactionResult.Invalid("CategoryId", "Kategoria musi odpowiadać typowi transakcji.");
+
+        if (category.Id == SavingsGoal.CategoryId)
+            return CreateTransactionResult.Invalid("CategoryId", "Wpłatę na oszczędności dodaj przy wybranym celu.");
 
         var transaction = Transaction.Create(
             userId,

@@ -1,18 +1,21 @@
 export type TransactionType = 1 | 2;
+export const savingsCategoryId = '55555555-5555-4555-8555-555555555555';
 export interface Session { accessToken: string; expiresAtUtc: string; email: string; role: string; }
 export interface Category { id: string; name: string; type: TransactionType; canEdit: boolean; }
 export interface EntryInput { amount: number; type: TransactionType; date: string; categoryId: string; description: string; }
 export interface BudgetWarning { limit: number; projectedSpending: number; }
-export interface Entry extends EntryInput { id: string; budgetWarning: BudgetWarning | null; }
+export interface Entry extends EntryInput { id: string; budgetWarning: BudgetWarning | null; goalId: string | null; isSavings: boolean; }
 export interface EntryPage { items: Entry[]; total: number; page: number; pageSize: number; }
 export interface MonthSpending { month: string; spending: number; }
 export interface Summary {
-  income: number; spending: number; balance: number; limit: number | null; highPriority: boolean;
+  income: number; spending: number; savings: number; balance: number; limit: number | null; highPriority: boolean;
   categories: { categoryId: string; name: string; spending: number }[];
   spendingTrend: MonthSpending[];
 }
-export interface GoalInput { name: string; target: number; saved: number; }
-export interface Goal extends GoalInput { id: string; completedAtUtc: string | null; }
+export interface GoalInput { name: string; target: number; }
+export interface Goal extends GoalInput { id: string; saved: number; completedAtUtc: string | null; }
+export interface GoalContribution { amount: number; date: string; }
+export interface GoalContributionResult { goal: Goal; transaction: Entry; }
 
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string, public readonly code?: string) { super(message); }

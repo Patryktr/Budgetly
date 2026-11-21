@@ -9,7 +9,7 @@ namespace Budgetly.Api.Features.Categories;
 public sealed class CategoryListCache(
     BudgetlyDbContext db, IDistributedCache cache, ILogger<CategoryListCache> logger)
 {
-    private static string Key(Guid userId) => $"categories:v1:{userId:N}";
+    private static string Key(Guid userId) => $"categories:v2:{userId:N}";
 
     public async Task<List<CategoryResponse>> GetAsync(Guid userId, CancellationToken ct)
     {
