@@ -5,7 +5,7 @@ materialy.txt
 build_budgetly_plan.py
 /*.pdf
 /*.docx
-/Budgetly-demo.mp4
+/Budgetly-demo*.mp4
 
 # .NET
 **/bin/

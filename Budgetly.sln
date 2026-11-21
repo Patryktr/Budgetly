@@ -7,6 +7,39 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Budgetly.Api", "Budgetly.Ap
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Budgetly.Tests", "Budgetly.Tests\Budgetly.Tests.csproj", "{3BB4DDDB-5351-4735-9B8D-1F5DFE4F1BEC}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Budgetly.Web", "Budgetly.Web", "{19D29C50-D7B7-5F57-AEE3-8338BB38F3CD}"
+	ProjectSection(SolutionItems) = preProject
+		Budgetly.Web\.dockerignore = Budgetly.Web\.dockerignore
+		Budgetly.Web\Dockerfile = Budgetly.Web\Dockerfile
+		Budgetly.Web\angular.json = Budgetly.Web\angular.json
+		Budgetly.Web\nginx.conf = Budgetly.Web\nginx.conf
+		Budgetly.Web\package-lock.json = Budgetly.Web\package-lock.json
+		Budgetly.Web\package.json = Budgetly.Web\package.json
+		Budgetly.Web\tsconfig.app.json = Budgetly.Web\tsconfig.app.json
+		Budgetly.Web\tsconfig.json = Budgetly.Web\tsconfig.json
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{B9FF6291-9A7E-523B-878C-F4B3AFE8EEAA}"
+	ProjectSection(SolutionItems) = preProject
+		Budgetly.Web\src\index.html = Budgetly.Web\src\index.html
+		Budgetly.Web\src\main.ts = Budgetly.Web\src\main.ts
+		Budgetly.Web\src\styles.css = Budgetly.Web\src\styles.css
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "app", "app", "{0D7A05F1-0494-5CF1-9581-7F6E81A26DAC}"
+	ProjectSection(SolutionItems) = preProject
+		Budgetly.Web\src\app\app.component.html = Budgetly.Web\src\app\app.component.html
+		Budgetly.Web\src\app\app.component.ts = Budgetly.Web\src\app\app.component.ts
+		Budgetly.Web\src\app\budgetly-api.ts = Budgetly.Web\src\app\budgetly-api.ts
+		Budgetly.Web\src\app\spending-trend.component.ts = Budgetly.Web\src\app\spending-trend.component.ts
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "csv-import", "csv-import", "{550A85F6-B1EE-5573-99C4-C510B316C970}"
+	ProjectSection(SolutionItems) = preProject
+		Budgetly.Web\src\app\csv-import\csv-format.ts = Budgetly.Web\src\app\csv-import\csv-format.ts
+		Budgetly.Web\src\app\csv-import\csv-import.component.ts = Budgetly.Web\src\app\csv-import\csv-import.component.ts
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -44,5 +77,10 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{B9FF6291-9A7E-523B-878C-F4B3AFE8EEAA} = {19D29C50-D7B7-5F57-AEE3-8338BB38F3CD}
+		{0D7A05F1-0494-5CF1-9581-7F6E81A26DAC} = {B9FF6291-9A7E-523B-878C-F4B3AFE8EEAA}
+		{550A85F6-B1EE-5573-99C4-C510B316C970} = {0D7A05F1-0494-5CF1-9581-7F6E81A26DAC}
 	EndGlobalSection
 EndGlobal
