@@ -80,6 +80,18 @@ Wiersze są zapisywane kolejno w porządku pliku. Każdy wydatek przechodzi zwyk
 
 Prywatne endpointy wymagają nagłówka Authorization: Bearer TOKEN. W JSON type ma wartość 1 (przychód) lub 2 (wydatek). Daty mają postać RRRR-MM-DD. Zwykłe przekroczenie limitu zwraca budgetWarning przy udanym zapisie. Ścisły limit zwraca HTTP 409 z danymi limitu w odpowiedzi.
 
+## Struktura backendu
+
+Kod znajduje się w `Budgetly.Api/Features`, w folderach funkcji. Endpointy deklarują adresy, wymagane uprawnienia i modele wejściowe, a następnie wywołują handlery. Handlery zawierają walidację, reguły operacji i dostęp do danych przez EF Core. Przyjmują identyfikator użytkownika jako argument, dzięki czemu logika operacji jest niezależna od kontekstu HTTP.
+
+- `Auth/Register/RegisterHandler` i `Auth/Login/LoginHandler` obsługują rejestrację i logowanie.
+- `Transactions/CreateTransaction/CreateTransactionHandler` dodaje transakcje, a `Transactions/Manage/TransactionHandler` obsługuje historię, szczegóły, edycję i usuwanie.
+- `Budgets/SetMonthlyBudget/SetMonthlyBudgetHandler` ustawia limit. `Budgets/MonthlyBudgetHandler` oblicza podsumowanie i trend oraz usuwa limit.
+- `Categories/CategoryHandler` zarządza kategoriami i unieważnia cache po zapisie.
+- `Goals/GoalHandler` zarządza celami, a `CompleteGoalsHandler` oznacza osiągnięte cele. Worker wywołuje go okresowo.
+
+Modele request i response opisują kontrakty API. `Application/HandlerResult` przenosi wynik lub błąd operacji, a `Infrastructure/HandlerHttpResults` zamienia go na odpowiedź HTTP. Dodawanie transakcji ma własny model wyniku uwzględniający ostrzeżenie budżetowe i powtórny import CSV. `BudgetPolicy` zawiera współdzielone reguły finansowe.
+
 ## Testy i CI
 
 ~~~powershell

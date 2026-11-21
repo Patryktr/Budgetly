@@ -3,7 +3,6 @@ using Budgetly.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using StackExchange.Redis;
-using CategoryResponse = Budgetly.Api.Features.Categories.CategoryEndpoints.CategoryResponse;
 
 namespace Budgetly.Api.Features.Categories;
 

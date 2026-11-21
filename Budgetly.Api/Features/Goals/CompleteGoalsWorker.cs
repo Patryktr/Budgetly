@@ -1,6 +1,3 @@
-using Budgetly.Api.Data;
-using Microsoft.EntityFrameworkCore;
-
 namespace Budgetly.Api.Features.Goals;
 
 public sealed class CompleteGoalsWorker(IServiceScopeFactory scopeFactory, ILogger<CompleteGoalsWorker> logger) : BackgroundService
@@ -13,10 +10,7 @@ public sealed class CompleteGoalsWorker(IServiceScopeFactory scopeFactory, ILogg
             try
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
-                var db = scope.ServiceProvider.GetRequiredService<BudgetlyDbContext>();
-                var now = DateTime.UtcNow;
-                await db.Goals.Where(x => x.CompletedAtUtc == null && x.Saved >= x.Target)
-                    .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.CompletedAtUtc, now), stoppingToken);
+                await scope.ServiceProvider.GetRequiredService<CompleteGoalsHandler>().HandleAsync(stoppingToken);
             }
             catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {

@@ -5,6 +5,8 @@ using System.Security.Cryptography;
 using Budgetly.Api.Data;
 using Budgetly.Api.Features.Auth.Login;
 using Budgetly.Api.Features.Budgets;
+using Budgetly.Api.Features.Categories;
+using Budgetly.Api.Features.Goals;
 using Budgetly.Api.Features.Transactions.CreateTransaction;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -66,7 +68,7 @@ public sealed class ApiTests : IAsyncLifetime
         Assert.Equal(-110m, created.Amount);
         Assert.Equal(110m, created.BudgetWarning?.ProjectedSpending);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(response.Headers.Location)).StatusCode);
-        var summary = await client.GetFromJsonAsync<MonthlyBudgetEndpoints.MonthlySummary>("/api/budgets/2026-11");
+        var summary = await client.GetFromJsonAsync<MonthlySummary>("/api/budgets/2026-11");
         Assert.Equal(-110m, summary!.Balance);
         Assert.Equal(110m, Assert.Single(summary.Categories).Spending);
     }
@@ -95,6 +97,69 @@ public sealed class ApiTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound, (await other.GetAsync(created.Headers.Location)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await other.PutAsJsonAsync(created.Headers.Location, Expense(1))).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await other.DeleteAsync(created.Headers.Location)).StatusCode);
+    }
+
+    [Fact]
+    public async Task CategoryHandlersPreserveValidationCacheInvalidationAndOwnership()
+    {
+        await SignInAsync(client, "categories@example.test");
+        var initial = await client.GetFromJsonAsync<List<CategoryResponse>>("/api/categories");
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await client.PostAsJsonAsync("/api/categories", new { name = "", type = 2 })).StatusCode);
+
+        var created = await client.PostAsJsonAsync("/api/categories", new { name = "Weekend", type = 2 });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var category = (await created.Content.ReadFromJsonAsync<CategoryResponse>())!;
+        var ownList = await client.GetFromJsonAsync<List<CategoryResponse>>("/api/categories");
+        Assert.Equal(initial!.Count + 1, ownList!.Count);
+        Assert.Contains(ownList, x => x.Id == category.Id);
+
+        using var other = factory.CreateClient();
+        await SignInAsync(other, "other-category@example.test");
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await other.PutAsJsonAsync("/api/categories/" + category.Id, new { name = "Changed" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await other.DeleteAsync("/api/categories/" + category.Id)).StatusCode);
+        Assert.DoesNotContain((await other.GetFromJsonAsync<List<CategoryResponse>>("/api/categories"))!,
+            x => x.Id == category.Id);
+
+        var renamed = await client.PutAsJsonAsync("/api/categories/" + category.Id, new { name = "Trip" });
+        Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);
+        Assert.Equal("Trip", (await renamed.Content.ReadFromJsonAsync<CategoryResponse>())!.Name);
+        Assert.Contains((await client.GetFromJsonAsync<List<CategoryResponse>>("/api/categories"))!,
+            x => x.Id == category.Id && x.Name == "Trip");
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync("/api/categories/" + category.Id)).StatusCode);
+        Assert.DoesNotContain((await client.GetFromJsonAsync<List<CategoryResponse>>("/api/categories"))!,
+            x => x.Id == category.Id);
+    }
+
+    [Fact]
+    public async Task GoalAndBudgetHandlersPreserveResponsesAndPrivateData()
+    {
+        await SignInAsync(client, "goals@example.test");
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await client.PutAsJsonAsync("/api/budgets/invalid", new { limit = 50 })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await client.PostAsJsonAsync("/api/goals", new { name = "Trip", target = 0, saved = 0 })).StatusCode);
+        var created = await client.PostAsJsonAsync("/api/goals", new { name = "Trip", target = 100, saved = 30 });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var goal = (await created.Content.ReadFromJsonAsync<GoalResponse>())!;
+        Assert.Equal(30m, goal.Saved);
+
+        using var other = factory.CreateClient();
+        await SignInAsync(other, "other-goals@example.test");
+        Assert.Empty((await other.GetFromJsonAsync<List<GoalResponse>>("/api/goals"))!);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await other.PutAsJsonAsync("/api/goals/" + goal.Id, new { name = "Trip", target = 100, saved = 40 })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await other.DeleteAsync("/api/goals/" + goal.Id)).StatusCode);
+
+        var edited = await client.PutAsJsonAsync("/api/goals/" + goal.Id, new { name = "Travel", target = 100, saved = 40 });
+        Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
+        Assert.Equal("Travel", (await edited.Content.ReadFromJsonAsync<GoalResponse>())!.Name);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync("/api/goals/" + goal.Id)).StatusCode);
+        await SetBudgetAsync(true);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync("/api/budgets/2026-11")).StatusCode);
+        var summary = await client.GetFromJsonAsync<MonthlySummary>("/api/budgets/2026-11");
+        Assert.Null(summary!.Limit);
     }
 
     private async Task SetBudgetAsync(bool highPriority)

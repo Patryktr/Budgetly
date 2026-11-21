@@ -68,6 +68,12 @@ builder.Services.AddScoped<CategoryListCache>();
 builder.Services.AddDbContext<BudgetlyDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("Budgetly")));
 builder.Services.AddScoped<CreateTransactionHandler>();
+builder.Services.AddScoped<TransactionHandler>();
+builder.Services.AddScoped<CategoryHandler>();
+builder.Services.AddScoped<GoalHandler>();
+builder.Services.AddScoped<MonthlyBudgetHandler>();
+builder.Services.AddScoped<SetMonthlyBudgetHandler>();
+builder.Services.AddScoped<CompleteGoalsHandler>();
 if (builder.Configuration.GetValue("Goals:RunWorker", true))
     builder.Services.AddHostedService<CompleteGoalsWorker>();
 

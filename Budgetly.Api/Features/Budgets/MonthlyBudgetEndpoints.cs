@@ -1,73 +1,16 @@
-using System.Globalization;
-using Budgetly.Api.Data;
 using Budgetly.Api.Features.Auth;
-using Microsoft.EntityFrameworkCore;
+using Budgetly.Api.Infrastructure;
 
 namespace Budgetly.Api.Features.Budgets;
 
 public static class MonthlyBudgetEndpoints
 {
-    public sealed record CategoryTotal(Guid CategoryId, string Name, decimal Spending);
-    public sealed record MonthSpending(string Month, decimal Spending);
-    public sealed record MonthlySummary(decimal Income, decimal Spending, decimal Balance, decimal? Limit,
-        bool HighPriority, IReadOnlyList<CategoryTotal> Categories, IReadOnlyList<MonthSpending> SpendingTrend);
-
-    private const int TrendMonths = 6;
-
     public static void MapMonthlySummary(this WebApplication app)
     {
         var group = app.MapGroup("/api/budgets").RequireAuthorization().WithTags("Budgets");
-        group.MapGet("/{month}", SummaryAsync);
-        group.MapDelete("/{month}", DeleteAsync);
+        group.MapGet("/{month}", async (string month, HttpContext context, MonthlyBudgetHandler handler, CancellationToken ct) =>
+            (await handler.SummaryAsync(JwtTokens.UserId(context.User), month, ct)).ToHttpResult());
+        group.MapDelete("/{month}", async (string month, HttpContext context, MonthlyBudgetHandler handler, CancellationToken ct) =>
+            (await handler.DeleteAsync(JwtTokens.UserId(context.User), month, ct)).ToHttpResult(StatusCodes.Status204NoContent));
     }
-
-    private static async Task<IResult> SummaryAsync(string month, HttpContext context, BudgetlyDbContext db, CancellationToken ct)
-    {
-        if (!BudgetPolicy.TryParseMonth(month, out var date)) return InvalidMonth();
-        var userId = JwtTokens.UserId(context.User);
-        var (start, end) = BudgetPolicy.Month(date);
-        var transactions = db.Transactions.Where(x => x.UserId == userId && x.Date >= start && x.Date <= end);
-        var income = await transactions.Where(x => x.Amount > 0).SumAsync(x => x.Amount, ct);
-        var categorySums = await transactions.Where(x => x.Amount < 0)
-            .GroupBy(x => new { x.CategoryId, x.Category!.Name })
-            .Select(g => new { g.Key.CategoryId, g.Key.Name, Amount = g.Sum(x => x.Amount) })
-            .ToListAsync(ct);
-        var expenses = categorySums.Select(x => new CategoryTotal(x.CategoryId, x.Name, -x.Amount))
-            .OrderByDescending(x => x.Spending).ToList();
-        var budget = await db.MonthlyBudgets.FindAsync([userId, start], ct);
-        var spending = expenses.Sum(x => x.Spending);
-        var trend = await LoadSpendingTrendAsync(db, userId, start, end, ct);
-        return Results.Ok(new MonthlySummary(income, spending, income - spending, budget?.Limit,
-            budget?.HighPriority ?? false, expenses, trend));
-    }
-
-    private static async Task<List<MonthSpending>> LoadSpendingTrendAsync(
-        BudgetlyDbContext db, Guid userId, DateOnly selectedMonth, DateOnly end, CancellationToken ct)
-    {
-        var monthCount = Math.Min(TrendMonths, (selectedMonth.Year - 1) * 12 + selectedMonth.Month);
-        var firstMonth = selectedMonth.AddMonths(1 - monthCount);
-        var monthlyTotals = await db.Transactions
-            .Where(x => x.UserId == userId && x.Amount < 0 && x.Date >= firstMonth && x.Date <= end)
-            .GroupBy(x => new { x.Date.Year, x.Date.Month })
-            .Select(g => new { g.Key.Year, g.Key.Month, Total = g.Sum(x => x.Amount) })
-            .ToDictionaryAsync(x => (x.Year, x.Month), x => -x.Total, ct);
-
-        return Enumerable.Range(0, monthCount).Select(firstMonth.AddMonths)
-            .Select(date => new MonthSpending(date.ToString("yyyy-MM", CultureInfo.InvariantCulture),
-                monthlyTotals.GetValueOrDefault((date.Year, date.Month))))
-            .ToList();
-    }
-
-    private static async Task<IResult> DeleteAsync(string month, HttpContext context, BudgetlyDbContext db, CancellationToken ct)
-    {
-        if (!BudgetPolicy.TryParseMonth(month, out var date)) return InvalidMonth();
-        var userId = JwtTokens.UserId(context.User);
-        var count = await db.MonthlyBudgets.Where(x => x.UserId == userId && x.MonthStart == date).ExecuteDeleteAsync(ct);
-        return count == 0 ? Results.NotFound() : Results.NoContent();
-    }
-
-    private static IResult InvalidMonth() => Results.ValidationProblem(new Dictionary<string, string[]>
-    {
-        ["month"] = ["Użyj formatu RRRR-MM."]
-    });
 }
